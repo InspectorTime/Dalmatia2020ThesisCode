@@ -161,3 +161,11 @@ threshold_s = ndays*24*60*60
 
 df_tourists = df.dropna()
 df_tourists = df_tourists[df_tourists['duration']<threshold_s]
+
+## Lines - Geometry
+gdf = gpd.GeoDataFrame(df_tourists[['usernames','year','startdate','enddate','duration',
+'count','length']], geometry = df_tourists.geometry)
+gdf.crs = {'init' :'epsg:4326'}
+gdf.to_file(driver = 'ESRI Shapefile', filename = 'data/trajectories/trajectories.shp')
+gdf.head()
+
