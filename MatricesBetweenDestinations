@@ -1,5 +1,6 @@
 ## This code is used to make matrices which represent relations between locations selected.
 ## A shapefile of places polygons can be found in the data folder
+## In addition to matrices, the code for graphs is provided down as well
 
 def shapefile2polygon(fname):
     shp_file = fiona.open(fname)
@@ -107,3 +108,24 @@ data = {
 df = pd.DataFrame.from_dict(data)
 df.to_csv(f'super_secret_percentage_information.csv', encoding='utf-8', index=False)
 df.head()
+
+
+## Graphs
+grouped = df.groupby(['year','city1'])
+#print(grouped.mean())
+
+fontsize = 16
+plt.rcParams.update({'font.size': fontsize})
+
+for city1 in cities:
+    fig, ax = plt.subplots(figsize=(16, 6))
+ 
+    for city2 in cities:
+        if city1!=city2:
+            sub_df = df[(df['city1']==city1) & (df['city2']==city2)]
+            x = sub_df['year']
+            y = sub_df['percentage']
+            ax.plot(x,y,label=city2)
+    ax.set_title(city1)
+    plt.legend()
+    plt.show()
