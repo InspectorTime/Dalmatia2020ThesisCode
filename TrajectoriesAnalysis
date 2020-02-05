@@ -1,0 +1,146 @@
+## The code here provides quanititative analysis of the trajectories, including the graphs
+## A code on the bottom is written in R programming language
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from datetime import datetime
+import matplotlib.pyplot as plt
+%matplotlib inline
+
+df_traj = pd.read_csv('super_secret_tourism_information_trajectories.csv')
+df_traj.head()
+
+f = '%Y-%m-%d %H:%M:%S'
+def convert_date(date): return datetime.strptime(str(date),f)
+
+df_traj['startdate'] = df_traj['startdate'].apply(convert_date)
+df_traj['enddate'] = df_traj['enddate'].apply(convert_date)
+print(df_traj.dtypes)
+
+##setting the range for seasons: not the real dates not to break the data 
+years = list(range(2009,2019))
+seasons = [('winter',(1,1),(31,3)),('spring',(1,4),(31,6)),('summer',(1,7),(30,9)),('autumn',(1,10),(31,12))]
+colors = ['#66c2a5','#fc8d62','#8da0cb','#e78ac3']
+data = {}
+for year in years:
+    for s in seasons:
+        season = s[0]
+        data_season = data.get(season,[])
+        #if season=='winter':
+        #    from_date = datetime(year=year-1,month=s[1][1],day=s[1][0])
+        #else:
+        from_date = datetime(year=year,month=s[1][1],day=s[1][0])
+        to_date = datetime(year=year,month=s[2][1],day=s[2][0],hour=23,minute=59,second=59)
+        
+        # print(from_date,to_date)
+        
+        df_season = df_traj[(from_date<=df_traj['startdate']) & (df_traj['enddate']<=to_date)]
+        avg_length = np.mean(df_season['length'])
+        avg_duration = np.mean(df_season['duration'])
+        
+        data_season.append((avg_length,avg_duration))
+        data[season] = data_season
+        
+fig, ax = plt.subplots(figsize=(16, 6))
+fontsize = 16
+plt.rcParams.update({'font.size': fontsize})
+
+## duration plot
+for i, s in enumerate(seasons):
+    season = s[0]
+    data_season = data[season]
+    data_duration = [d[1]/3600/24 for d in data_season]
+    plt.plot(years,data_duration,colors[i],label=season)
+    
+ax.set_xlabel('Year')
+ax.set_ylabel('Average trajectory duration (d)')
+ax.set_xticks(years)
+ax.set_xticklabels(years)
+ax.legend(ncol=4)
+
+plt.savefig(f'plots/average_trajectory_duration.png',dpi=300,bbox_inches='tight')
+plt.show()    
+
+
+## R code
+tom_data <- read.csv("./tom_data/trajektorije_csv.csv", header = TRUE,
+                         stringsAsFactors = F)
+tom_data$date <- as.POSIXct(tom_data$startdate, format='%Y-%m-%d %H:%M:%S')
+
+tom_data$month <- month(tom_data$date,label = T,abbr = F)
+tom_data$length <- tom_data$length / 1000
+tom_data <- tom_data[tom_data$length>0,]
+tom_data$season <- NA
+tom_data$season <- ifelse(tom_data$month %in% c('January','February','March'),
+                          'Winter',tom_data$season)
+tom_data$season <- ifelse(tom_data$month %in% c('April','May','June'),
+                          'Spring',tom_data$season)
+tom_data$season <- ifelse(tom_data$month %in% c('July','August','September'),
+                          'Summer',tom_data$season)
+tom_data$season <- ifelse(tom_data$month %in% c('October','November','December'),
+                          'Autumn',tom_data$season)
+
+tom_data$year <- year(tom_data$date)
+tom_data$year <- as.character(tom_data$year)
+
+spring_data <- tom_data[tom_data$season=='Spring',]
+summer_data <- tom_data[tom_data$season=='Summer',]
+autumn_data <- tom_data[tom_data$season=='Autumn',]
+winter_data <- tom_data[tom_data$season=='Winter',]
+
+spring_plot <- ggplot(spring_data, aes(x=year, y=length)) + 
+  geom_boxplot(width=.5,position = position_dodge(.7),outlier.size=.8)+
+  theme_bw()+
+  #scale_fill_manual(values=c('#4daf4a','#984ea3'))+
+  scale_y_continuous(limits=c(0,1000),breaks=seq(0,1000,200),expand = c(0,0))+
+  labs(x = "Year", y = "Length (km)")
+  #theme(axis.text.x = element_text(size=10, angle = 45, hjust = 1),
+  #      legend.position = c(0.89,0.895),
+  #      legend.box.background = element_rect(colour = "black"),
+  #      plot.margin = unit(c(0.5,0.5,2,0.5), "cm"),
+  #      legend.text=element_text(size=8))
+
+spring_plot
+
+summer_plot <- ggplot(summer_data, aes(x=year, y=length)) + 
+  geom_boxplot(width=.5,position = position_dodge(.7),outlier.size=.8)+
+  theme_bw()+
+  #scale_fill_manual(values=c('#4daf4a','#984ea3'))+
+  scale_y_continuous(limits=c(0,1000),breaks=seq(0,1000,200),expand = c(0,0))+
+  labs(x = "Year", y = "Length (km)")
+#theme(axis.text.x = element_text(size=10, angle = 45, hjust = 1),
+#      legend.position = c(0.89,0.895),
+#      legend.box.background = element_rect(colour = "black"),
+#      plot.margin = unit(c(0.5,0.5,2,0.5), "cm"),
+#      legend.text=element_text(size=8))
+
+summer_plot
+
+autumn_plot <- ggplot(autumn_data, aes(x=year, y=length)) + 
+  geom_boxplot(width=.5,position = position_dodge(.7),outlier.size=.8)+
+  theme_bw()+
+  #scale_fill_manual(values=c('#4daf4a','#984ea3'))+
+  scale_y_continuous(limits=c(0,1000),breaks=seq(0,1000,200),expand = c(0,0))+
+  labs(x = "Year", y = "Length (km)")
+#theme(axis.text.x = element_text(size=10, angle = 45, hjust = 1),
+#      legend.position = c(0.89,0.895),
+#      legend.box.background = element_rect(colour = "black"),
+#      plot.margin = unit(c(0.5,0.5,2,0.5), "cm"),
+#      legend.text=element_text(size=8))
+
+autumn_plot
+
+winter_plot <- ggplot(winter_data, aes(x=year, y=length)) + 
+  geom_boxplot(width=.5,position = position_dodge(.7),outlier.size=.8)+
+  theme_bw()+
+  #scale_fill_manual(values=c('#4daf4a','#984ea3'))+
+  scale_y_continuous(limits=c(0,500),breaks=seq(0,500,100),expand = c(0,0))+
+  labs(x = "Year", y = "Length (km)")
+#theme(axis.text.x = element_text(size=10, angle = 45, hjust = 1),
+#      legend.position = c(0.89,0.895),
+#      legend.box.background = element_rect(colour = "black"),
+#      plot.margin = unit(c(0.5,0.5,2,0.5), "cm"),
+#      legend.text=element_text(size=8))
+
+winter_plot
