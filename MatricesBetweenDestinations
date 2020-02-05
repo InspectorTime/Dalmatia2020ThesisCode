@@ -1,0 +1,109 @@
+## This code is used to make matrices which represent relations between locations selected.
+## A shapefile of places polygons can be found in the data folder
+
+def shapefile2polygon(fname):
+    shp_file = fiona.open(fname)
+    poly = shp_file[0]['geometry']['coordinates'][0]
+    return Polygon(poly)
+
+
+cities = ['paklenica','zadar','kornati','krka','sibenik','trogir','split','makarska','hvar','korcula','mljet','dubrovnik','konavle']
+city_polys = [shapefile2polygon(f'data/polygons/{city}.shp') for city in cities]
+
+def tom_conversion_function(arr):
+    
+    rel_arr = np.zeros(arr.shape,dtype=np.int)
+    nrow, ncol = arr.shape
+    for i in range(nrow):
+        city_total = arr[i,i]
+        for j in range(ncol):
+            if not (i==j):
+                if arr[i,i]==0:
+                    percentage = 0
+                else:
+                    percentage = 100./arr[i,i]*arr[i,j]    
+                rel_arr[j,i] = round(percentage,0)
+            else: rel_arr[i,j] = city_total     
+    return rel_arr
+    
+
+year_data, city1_data, city2_data, percentage_data = ([],[],[],[])
+total_matrices_years = []
+
+for year in range(2009,2019):
+    arr = np.zeros((len(cities),len(cities)),dtype=np.int)
+    
+    df_tourists_year = df_tourists[df_tourists['year']==year]
+    print(f'{year}: {df_tourists_year.shape[0]}')
+    
+    # do for each tourist
+    tourist_paths = list(df_tourists_year['points'])
+    for tourist_path in tourist_paths:
+        
+        # cities tourist has visited
+        visited = [False for _ in range(len(cities))]
+        
+        for i, (city,poly) in enumerate(zip(cities,city_polys)):
+            was_in_city = False
+            for point in tourist_path:
+                if poly.contains(point):
+                    was_in_city = True
+                    break
+            visited[i] = was_in_city
+    
+        if any(visited):
+            for index, x in np.ndenumerate(arr):
+                icity1, icity2 = index
+                if visited[icity1] and visited[icity2]:
+                    arr[icity1,icity2] = arr[icity1,icity2]+1
+    print(cities)
+    print(arr)
+    rel_arr = np.zeros(arr.shape,dtype=np.int)
+    for i, city1 in enumerate(cities):
+        city_total = arr[i,i]
+        
+        # print(f'{city1} {year} (total: {city_total})')
+        results = []
+        
+        for j, city2 in enumerate(cities):
+            
+            if not (city1==city2):
+                if arr[i,i]==0:
+                    percentage = 0
+                else:
+                    percentage = 100./arr[i,i]*arr[i,j]
+                    
+                rel_arr[j,i] = round(percentage,0)
+                year_data.append(year)
+                city1_data.append(city1)
+                city2_data.append(city2)
+                percentage_data.append(percentage)
+                results.append((city2,percentage))
+                  
+        results.sort(key=lambda tup: tup[1])
+        results.reverse()
+        # for result in results:
+            # print(f'{result[1]:.1f} % ({result[0]})')
+    #print(tom_conversion_function(arr))
+    total_matrices_years.append(arr)
+    
+    
+
+for i in range(2009,2019,2):
+    ifrom = i-2009
+    mfrom = total_matrices_years[ifrom]
+    mto = total_matrices_years[ifrom+1]
+    magg = np.add(mfrom,mto)
+    print(f'{i}-{i+1}')
+    print(tom_conversion_function(magg))
+
+        
+data = {
+    'year': year_data,
+    'city1': city1_data,
+    'city2': city2_data,
+    'percentage': percentage_data,
+}
+df = pd.DataFrame.from_dict(data)
+df.to_csv(f'super_secret_percentage_information.csv', encoding='utf-8', index=False)
+df.head()
