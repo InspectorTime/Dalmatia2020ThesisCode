@@ -1,0 +1,142 @@
+## The code given here explains how dbscan was done, as well as how only 10 top places are chosen
+
+## Data preparation
+
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.cluster import KMeans
+from sklearn.datasets import make_blobs
+from sklearn.cluster import DBSCAN
+from sklearn import metrics
+from sklearn.datasets.samples_generator import make_blobs
+from sklearn.preprocessing import StandardScaler
+import pandas as pd
+from datetime import datetime
+%matplotlib inline
+df_photos = pd.read_csv('super_secret_tourism_information_photographs.csv')
+df_photos.head()
+
+## DBSCAN parameters
+eps = 0.025 # parameter for dbscan
+min_samples = 10 # parameter for dbscan
+top = 10 # parameter for clusters
+
+##
+years = list(range(2009,2019))
+labels = []
+for year, ax in zip(years,axs):
+    df_year = df_photos[df_photos['year']==year]
+    coords = np.array(df_year[['lng','lat']])
+    
+    # Compute DBSCAN
+    db = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
+    core_samples_mask = np.zeros_like(db.labels_, dtype=bool)
+    core_samples_mask[db.core_sample_indices_] = True
+
+    # Number of clusters in labels, ignoring noise if present.
+    n_clusters_ = len(set(db.labels_)) - (1 if -1 in db.labels_ else 0)
+    n_noise_ = list(db.labels_).count(-1)
+
+    labels.extend(db.labels_)
+    
+        
+df_photos['cluster'] = labels
+
+container = []
+for year, ax in zip(years,axs):
+    
+    df_year = df_photos[df_photos['year']==year]
+    
+    clusters = list(df_year['cluster'])
+    unique_clusters = list(set(clusters))
+
+    for c in unique_clusters:
+        
+        df_sub = df_year[df_year['cluster']==c]
+        size = df_sub.shape[0]
+        
+        if not c==-1:
+            coords = np.array(df_sub[['lng','lat']])
+            center_coords = np.mean(coords,axis=0)
+            container.append((year,center_coords[0],center_coords[1],size,c))
+            
+            #plot_agg(ax,center_coords,size,f'Year: {year}, n: {size}')
+        
+        
+df_clusters = pd.DataFrame.from_dict({
+    'year': [entry[0] for entry in container],
+    'lng': [entry[1] for entry in container],
+    'lat': [entry[2] for entry in container],
+    'size': [entry[3] for entry in container],
+    'cluster': [entry[4] for entry in container],
+})
+
+def plot_dbscan(ax,df,year,colors):
+
+    df_sub = df[df['year']==year]
+    n_noise = df_sub[df_sub['cluster']==-1].shape[0]
+    
+    # Black removed and is used for noise instead.
+    labels = list(df_sub['cluster'])
+    unique_labels = set(labels)
+
+
+    for k, col in zip(unique_labels, colors):
+        points = df_sub[df_sub['cluster']==k]
+        coords = np.array(points[['lng','lat']])
+        
+        if k == -1:        
+            # Black used for noise.
+            col = [0, 0, 0, 1]
+            ax.plot(coords[:, 0], coords[:, 1], 'o', markerfacecolor=tuple(col),
+                markeredgecolor='k', markersize=1)
+        else:
+            col = colors[k]
+            ax.plot(coords[:, 0], coords[:, 1], 'o', markerfacecolor=tuple(col),
+                markeredgecolor='k', markersize=6)
+
+    ax.set_title(f'{year}, n clusters: {len(unique_labels)-1}, n noise: {n_noise}')
+   
+    # end of plot function
+    
+def plot_clusters(ax,df,year,top,colors):
+
+    df_sub = df[df['year']==year]
+    sizes = sorted(list(df_sub['size']))
+    min_size = 0 if len(sizes)<top else sizes[-top-1]
+    max_size = sizes[-1]
+    for index, row in df_sub.iterrows():
+        
+        s = int(row['size'])
+        if s > min_size:
+            k = int(row['cluster'])
+            col = colors[k]
+            lng, lat = row['lng'], row['lat']
+            
+            s_norm = (s-min_size)/(max_size-min_size)
+            m_size = s_norm*50+10
+            
+            ax.plot(lng,lat,'o',markerfacecolor=tuple(col),markeredgecolor='k',markersize=m_size)
+            # ax.scatter(lng,lat,c=tuple(col),s=s/10)
+
+    
+    ax.set_title(f'{year}, top {top}, min/max {min_size}/{max_size}')
+   
+    # end of plot function
+    
+fontsize = 16
+    
+fig, axs = plt.subplots(10,2, figsize=(20,120), facecolor='w', edgecolor='k',sharey=True,sharex=True)
+plt.rcParams.update({'font.size': fontsize})
+fig.subplots_adjust(hspace=0.05, wspace=0.05)
+axs = axs.ravel()
+
+unique_labels = set(df_clusters['cluster'])
+colors = [plt.cm.Spectral(each) for each in np.random.uniform(0, 1, len(unique_labels))]
+
+for i, year in enumerate(years):
+    ax1, ax2 = axs[i*2], axs[i*2+1]
+    plot_dbscan(ax1,df_photos,year,colors)
+    plot_clusters(ax2,df_clusters,year,top,colors)
+    
+    
