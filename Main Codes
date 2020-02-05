@@ -1,0 +1,163 @@
+##Importing Packages
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+import shapely
+from shapely.geometry import Point, LineString, Polygon
+import geopandas as gpd
+import math
+from datetime import datetime
+import matplotlib as mpl
+from datetime import datetime
+from math import radians, cos, sin, asin, sqrt
+import fiona
+
+##Observe the data
+
+data_folder = 'data/'
+years = range(2009,2019)
+dfs = [pd.read_csv(f'{data_folder}Dalmatia{year}.csv') for year in years]
+df = pd.concat(dfs,axis=0)
+df = df[['owner','lng','lat','title','tags','taken']]
+print(f'Number of photos: {df.shape[0]}')
+df.head()
+
+##Year by Year data; Trajectories length; Duration; only for chosen tourists
+
+def process_year(year):
+    
+    df = pd.read_csv(f'data/Dalmatia{year}.csv')
+    df = df[['owner','lng','lat','title','tags','taken']]
+    
+    owners = df['owner'].unique()
+
+    data = []
+    
+    # processing each owner
+    for iowner, owner in enumerate(owners):
+        
+        owner_data = df[df['owner']==owner]
+        count = owner_data.shape[0]
+    
+        lng_coords = owner_data['lng']
+        lat_coords = owner_data['lat']
+        
+        dates = []
+        for date in list(owner_data['taken']):
+            a, b, d, HMS, _, Y = date.split()
+            dates.append(datetime.strptime(f'{a} {b} {d} {HMS} {Y}', '%a %b %d %H:%M:%S %Y'))
+    
+        dates, lng_coords, lat_coords = zip(*sorted(zip(dates, lng_coords, lat_coords)))
+        duration = (dates[-1]-dates[0]).total_seconds()
+        startDate = dates[0].strftime('%Y-%m-%d %H:%M:%S')
+        endDate = dates[-1].strftime('%Y-%m-%d %H:%M:%S')
+        year = int(dates[0].strftime('%Y'))
+        
+        # no line and length calculations for counts <4 and >100
+        if count<5 or count>150:
+            points = np.NaN
+            line = np.NaN
+            length = np.NaN
+            duration = np.NaN
+        else:
+            points = [Point(lng,lat) for (lng, lat) in zip(lng_coords,lat_coords)]
+            length = distance(points)
+            line = LineString(points)
+            points = MultiPoint(points)
+    
+        data.append((owner,year,startDate,endDate,duration,count,length,points,line))
+        
+    data = {
+        'usernames': [entry[0] for entry in data],
+        'year': [entry[1] for entry in data],
+        'startdate': [entry[2] for entry in data],
+        'enddate': [entry[3] for entry in data],
+        'duration': [entry[4] for entry in data],
+        'count': [entry[5] for entry in data],
+        'length': [entry[6] for entry in data],
+        'points': [entry[7] for entry in data],
+        'geometry': [entry[8] for entry in data]
+    }
+    data = pd.DataFrame.from_dict(data)
+    
+    return data
+    # end of process year function
+  
+dfs = []
+for year in range(2009,2019):
+    print(year)
+    df = process_year(year)
+    print(df.shape)
+    dfs.append(df)
+
+df = pd.concat(dfs,axis=0)
+df = df[df['year']>=2009]
+print(df.shape)
+df.head()
+
+##Plot for users/Years
+
+class1 = df[df['count']<5]
+class2 = df[(5<=df['count']) & (df['count']<=30)]
+class3 = df[(30<df['count']) & (df['count']<=150)]
+class4 = df[df['count']>150]
+
+colors = ['#fdae61','#abd9e9','#2c7bb6','#d7191c']
+labels = [
+    'Very low contributing [1,4]',
+    'Low contributing [5,20]',
+    'High contributing [21,100]',
+    'Very high contributing [101,inf]'
+]
+
+n_users1 = list(class1.groupby(['year']).count()['usernames'])
+n_users2 = list(class2.groupby(['year']).count()['usernames'])
+n_users3 = list(class3.groupby(['year']).count()['usernames'])
+n_users4 = list(class4.groupby(['year']).count()['usernames'])
+
+fig, ax = plt.subplots(figsize=(16, 6))
+fontsize = 16
+plt.rcParams.update({'font.size': fontsize})
+years = list(range(2009,2019))
+# ax.plot(years,n_users1,label=labels[0],linestyle='-',color=colors[0])
+# ax.plot(years,n_users2,label=labels[1],color=colors[1])
+# ax.plot(years,n_users3,label=labels[2],color=colors[2])
+# ax.plot(years,n_users4,label=labels[3],linestyle='-',color=colors[3])
+plt.stackplot(years, [n_users1,n_users2,n_users3,n_users4], baseline='zero', colors=colors,labels=labels)
+ax.legend()
+ax.set_xlabel('Year')
+ax.set_ylabel('n Users')
+ax.set_xticks(years)
+ax.set_xticklabels(years)
+
+plt.savefig(f'plots/n_users.png',dpi=300,bbox_inches='tight')
+plt.show()
+
+##Plot for pictures/ Years
+n_photos1 = list(class1.groupby(['year']).sum()['count'])
+n_photos2 = list(class2.groupby(['year']).sum()['count'])
+n_photos3 = list(class3.groupby(['year']).sum()['count'])
+n_photos4 = list(class4.groupby(['year']).sum()['count'])
+print(n_photos1)
+
+fig, ax = plt.subplots(figsize=(16, 6))
+fontsize = 16
+plt.rcParams.update({'font.size': fontsize})
+years = list(range(2009,2019))
+plt.stackplot(years, [n_photos1,n_photos2,n_photos3,n_photos4], baseline='zero', colors=colors,labels=labels)
+ax.legend()
+ax.set_xlabel('Year')
+ax.set_ylabel('n Photos')
+ax.set_xticks(years)
+ax.set_xticklabels(years)
+
+plt.savefig(f'plots/n_photos.png',dpi=300,bbox_inches='tight')
+plt.show()
+
+## Chosing only tourists (limit by duration)
+ndays = 20
+threshold_s = ndays*24*60*60 
+
+df_tourists = df.dropna()
+df_tourists = df_tourists[df_tourists['duration']<threshold_s]
